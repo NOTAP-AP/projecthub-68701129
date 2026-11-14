@@ -1,0 +1,116 @@
+<?php
+require_once __DIR__ . '/condb.php';
+session_start();
+
+if (empty($_SESSION['user_id'])) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'message' => 'กรุณาเข้าสู่ระบบก่อน'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$method = $_SERVER['REQUEST_METHOD'];
+$data = json_decode(file_get_contents('php://input'), true);
+
+try {
+    if ($method === 'GET') {
+        $role = $_SESSION['role'] ?? '';
+        if (in_array($role, ['admin', 'hr', 'manager'], true)) {
+            $stmt = $conn->query(
+                'SELECT l.id, l.employee_id, e.employee_code, e.first_name, e.last_name,
+                        l.leave_type, l.start_date, l.end_date, l.reason, l.status,
+                        l.reviewed_by, l.reviewed_at, l.created_at
+                 FROM leave_requests l JOIN employees e ON e.id = l.employee_id
+                 ORDER BY l.created_at DESC'
+            );
+        } else {
+            $stmt = $conn->prepare(
+                'SELECT l.id, l.employee_id, e.employee_code, e.first_name, e.last_name,
+                        l.leave_type, l.start_date, l.end_date, l.reason, l.status,
+                        l.reviewed_by, l.reviewed_at, l.created_at
+                 FROM leave_requests l JOIN employees e ON e.id = l.employee_id
+                 JOIN users u ON u.employee_id = e.id
+                 WHERE u.id = ? ORDER BY l.created_at DESC'
+            );
+            $stmt->execute([$_SESSION['user_id']]);
+        }
+        echo json_encode(['success' => true, 'data' => $stmt->fetchAll()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($method === 'POST') {
+        if (!is_array($data)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'ต้องส่งข้อมูล JSON'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $role = $_SESSION['role'] ?? '';
+        $employeeId = null;
+        if (in_array($role, ['admin', 'hr'], true) && isset($data['employee_id'])) {
+            $employeeId = filter_var($data['employee_id'], FILTER_VALIDATE_INT);
+        } else {
+            $stmt = $conn->prepare('SELECT employee_id FROM users WHERE id = ?');
+            $stmt->execute([$_SESSION['user_id']]);
+            $employeeId = $stmt->fetchColumn();
+        }
+        $leaveType = $data['leave_type'] ?? '';
+        $startDate = $data['start_date'] ?? '';
+        $endDate = $data['end_date'] ?? '';
+        $allowedTypes = ['Annual', 'Sick', 'Personal', 'Other'];
+        $start = is_string($startDate) ? DateTime::createFromFormat('!Y-m-d', $startDate) : false;
+        $end = is_string($endDate) ? DateTime::createFromFormat('!Y-m-d', $endDate) : false;
+        $validStart = $start && $start->format('Y-m-d') === $startDate;
+        $validEnd = $end && $end->format('Y-m-d') === $endDate;
+        if (!$employeeId || !in_array($leaveType, $allowedTypes, true) || !$validStart || !$validEnd || $end < $start) {
+            http_response_code(422);
+            echo json_encode(['success' => false, 'message' => 'ข้อมูลคำขอลาไม่ครบหรือไม่ถูกต้อง'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $stmt = $conn->prepare(
+            'INSERT INTO leave_requests (employee_id, leave_type, start_date, end_date, reason)
+             VALUES (?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$employeeId, $leaveType, $startDate, $endDate, $data['reason'] ?? null]);
+        http_response_code(201);
+        echo json_encode(['success' => true, 'message' => 'ส่งคำขอลาสำเร็จ', 'id' => (int) $conn->lastInsertId()], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    if ($method === 'PUT') {
+        if (!in_array($_SESSION['role'] ?? '', ['admin', 'hr'], true)) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'เฉพาะผู้ดูแลระบบหรือ HR ที่อนุมัติคำขอได้'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $id = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
+        $status = is_array($data) ? ($data['status'] ?? '') : '';
+        if (!$id || !in_array($status, ['Approved', 'Rejected'], true)) {
+            http_response_code(422);
+            echo json_encode(['success' => false, 'message' => 'ระบุ id และ status เป็น Approved หรือ Rejected'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $stmt = $conn->prepare(
+            'UPDATE leave_requests SET status = ?, reviewed_by = ?, reviewed_at = CURRENT_TIMESTAMP WHERE id = ?'
+        );
+        $stmt->execute([$status, $_SESSION['user_id'], $id]);
+        if (!$stmt->rowCount()) {
+            $check = $conn->prepare('SELECT id FROM leave_requests WHERE id = ?');
+            $check->execute([$id]);
+            if (!$check->fetchColumn()) {
+                http_response_code(404);
+                echo json_encode(['success' => false, 'message' => 'ไม่พบคำขอลา'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+        }
+        echo json_encode(['success' => true, 'message' => 'บันทึกผลการพิจารณาแล้ว'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    header('Allow: GET, POST, PUT, OPTIONS');
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'ไม่รองรับ HTTP method นี้'], JSON_UNESCAPED_UNICODE);
+} catch (PDOException $e) {
+    error_log($e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'ประมวลผลข้อมูลคำขอลาไม่สำเร็จ'], JSON_UNESCAPED_UNICODE);
+}
