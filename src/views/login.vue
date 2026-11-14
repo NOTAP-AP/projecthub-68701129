@@ -1,13 +1,16 @@
 <template>
   <main class="login-page">
-    <form class="login-card" @submit.prevent="mode === 'login' ? submitLogin() : submitRegister()">
+    <form class="login-card" @submit.prevent="!adminOnly && mode === 'register' ? submitRegister() : submitLogin()">
       <p class="eyebrow">PROJECT HUB</p>
-      <h1>{{ mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครพนักงาน' }}</h1>
+      <h1>{{ adminOnly ? 'เข้าสู่ระบบผู้ดูแลระบบ' : (mode === 'login' ? 'เข้าสู่ระบบพนักงาน' : 'สมัครพนักงาน') }}</h1>
       <p class="intro">
-        {{ mode === 'login' ? 'กรอกชื่อผู้ใช้และรหัสผ่านเพื่อดำเนินการต่อ' : 'กรอกข้อมูลเพื่อสร้างบัญชีพนักงาน' }}
+        {{ adminOnly ? 'สำหรับบัญชีผู้ดูแลระบบเท่านั้น' : (mode === 'login' ? 'กรอกชื่อผู้ใช้และรหัสผ่านเพื่อดำเนินการต่อ' : 'กรอกข้อมูลเพื่อสร้างบัญชีพนักงาน') }}
+      </p>
+      <p v-if="$route.query.auth_error === 'unavailable'" class="message" role="alert">
+        ไม่สามารถตรวจสอบสถานะการเข้าสู่ระบบได้ กรุณาลองอีกครั้ง
       </p>
 
-      <template v-if="mode === 'register'">
+      <template v-if="!adminOnly && mode === 'register'">
         <label for="firstName">ชื่อ</label>
         <input id="firstName" v-model.trim="registration.first_name" type="text" autocomplete="given-name" maxlength="100" required>
 
@@ -33,11 +36,13 @@
 
       <p v-if="message" class="message" role="alert">{{ message }}</p>
       <button type="submit" :disabled="loading">
-        {{ loading ? 'กำลังดำเนินการ…' : (mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครพนักงาน') }}
+        {{ loading ? 'กำลังดำเนินการ…' : (adminOnly || mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครพนักงาน') }}
       </button>
-      <button class="mode-toggle" type="button" :disabled="loading" @click="toggleMode">
+      <button v-if="!adminOnly" class="mode-toggle" type="button" :disabled="loading" @click="toggleMode">
         {{ mode === 'login' ? 'ยังไม่มีบัญชี? สมัครพนักงาน' : 'มีบัญชีแล้ว? เข้าสู่ระบบ' }}
       </button>
+      <router-link v-if="adminOnly" class="home-link" to="/login">เข้าสู่ระบบพนักงาน</router-link>
+      <router-link v-else class="home-link" to="/admin/login">เข้าสู่ระบบผู้ดูแลระบบ</router-link>
       <router-link class="home-link" to="/">กลับหน้าหลัก</router-link>
     </form>
   </main>
@@ -46,6 +51,12 @@
 <script>
 export default {
   name: 'LoginView',
+  props: {
+    adminOnly: {
+      type: Boolean,
+      default: false
+    }
+  },
   data() {
     return {
       username: '',
@@ -74,7 +85,11 @@ export default {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: this.username, password: this.password })
+          body: JSON.stringify({
+            username: this.username,
+            password: this.password,
+            portal: this.adminOnly ? 'admin' : 'employee'
+          })
         })
         const result = await response.json()
 
@@ -84,7 +99,7 @@ export default {
         }
 
         window.alert('เข้าสู่ระบบได้แล้ว')
-        this.$router.push('/')
+        this.$router.push('/about')
       } catch (error) {
         this.message = 'เชื่อมต่อระบบไม่ได้ ตรวจสอบว่า Apache และฐานข้อมูลกำลังทำงาน'
       } finally {

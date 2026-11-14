@@ -29,6 +29,13 @@ if (!is_array($data) || !isset($data['username'], $data['password']) ||
     exit;
 }
 
+$portal = $data['portal'] ?? 'employee';
+if (!is_string($portal) || !in_array($portal, ['admin', 'employee'], true)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'message' => 'ประเภทบัญชีไม่ถูกต้อง'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $username = trim($data['username']);
 $password = $data['password'];
 if ($username === '' || $password === '') {
@@ -54,7 +61,11 @@ try {
     ]);
     $user = $stmt->fetch();
 
-    if (!$user || !password_verify($password, $user['password_hash'])) {
+    $roleAllowed = $user && (
+        ($portal === 'admin' && $user['role'] === 'admin') ||
+        ($portal === 'employee' && $user['role'] !== 'admin')
+    );
+    if (!$user || !$roleAllowed || !password_verify($password, $user['password_hash'])) {
         http_response_code(401);
         echo json_encode(['success' => false, 'message' => 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง'], JSON_UNESCAPED_UNICODE);
         exit;

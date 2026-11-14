@@ -96,6 +96,29 @@ CREATE TABLE IF NOT EXISTS leave_requests (
     REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS leave_request_attachments (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  leave_request_id BIGINT UNSIGNED NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(100) NOT NULL,
+  file_size INT UNSIGNED NOT NULL,
+  file_data LONGBLOB NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_leave_request_attachment (leave_request_id),
+  CONSTRAINT fk_leave_attachment_request FOREIGN KEY (leave_request_id)
+    REFERENCES leave_requests (id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS leave_request_attachment_chunks (
+  leave_request_id BIGINT UNSIGNED NOT NULL,
+  chunk_index INT UNSIGNED NOT NULL,
+  chunk_data MEDIUMBLOB NOT NULL,
+  PRIMARY KEY (leave_request_id, chunk_index),
+  CONSTRAINT fk_leave_attachment_chunk_request FOREIGN KEY (leave_request_id)
+    REFERENCES leave_request_attachments (leave_request_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
 INSERT IGNORE INTO departments (id, name, description) VALUES
   (1, 'ทรัพยากรบุคคล (HR)', 'บริหารทรัพยากรบุคคล'),
   (2, 'เทคโนโลยีสารสนเทศ (IT)', 'พัฒนาและดูแลระบบสารสนเทศ'),

@@ -4,7 +4,10 @@
       <p class="eyebrow">PROJECT HUB</p>
       <h1>HR Connect</h1>
       <p>{{ msg }}</p>
-      <router-link to="/login">เข้าสู่ระบบ</router-link>
+      <div class="login-links">
+        <router-link to="/login">เข้าสู่ระบบพนักงาน</router-link>
+        <router-link class="admin-link" to="/admin/login">เข้าสู่ระบบผู้ดูแลระบบ</router-link>
+      </div>
     </section>
   </main>
 </template>
@@ -66,6 +69,27 @@ a {
   color: #fff;
   font-weight: 700;
   text-decoration: none;
+}
+
+.login-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.login-links a {
+  margin-top: 20px;
+}
+
+.login-links .admin-link {
+  background: #fff;
+  color: #28775b;
+  box-shadow: inset 0 0 0 1px #28775b;
+}
+
+.login-links .admin-link:hover {
+  background: #f0f7f3;
 }
 
 a:hover {
